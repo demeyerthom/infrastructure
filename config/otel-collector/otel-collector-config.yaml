@@ -1,0 +1,50 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+#  mongodb:
+#    hosts:
+#      - endpoint: mongodb:27017
+##    username: <root-username>
+##    password: <root-password>
+#    collection_interval: 30s
+#    initial_delay: 30s
+#    tls:
+#      insecure: true
+#      insecure_skip_verify: true
+
+processors:
+  batch:
+    send_batch_size: 1000
+    timeout: 10s
+
+exporters:
+  otlphttp/openobserve:
+    endpoint: http://openobserve:5080/api/default  # Replace with your OpenObserve endpoint
+    auth:
+      authenticator: basicauth/openobserve
+
+service:
+  extensions: [basicauth/openobserve]
+  pipelines:
+    traces:
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ otlphttp/openobserve ]
+    logs:
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ otlphttp/openobserve ]
+    metrics:
+      receivers: [ otlp ]
+      processors: [ batch ]
+      exporters: [ otlphttp/openobserve ]
+
+extensions:
+  basicauth/openobserve:
+    client_auth:
+      username: "demeyerthom@gmail.com"
+      password: "foobar"

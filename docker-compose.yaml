@@ -1,0 +1,167 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+
+name: infrastructure
+services:
+  otel-collector:
+    !!merge <<: *common
+    image: otel/opentelemetry-collector-contrib:0.141.0
+    container_name: otel-collector
+    user: "0:0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_DIR:-./config}/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    command:
+      - --config=/etc/otel-collector-config.yaml
+    environment:
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
+    ports:
+      - "1888:1888" # pprof extension
+      - "8888:8888" # Prometheus metrics exposed by the Collector
+      - "8889:8889" # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP http receiver
+      - "55679:55679" # zpages extension
+    networks:
+      - infrastructure
+
+  redis:
+    !!merge <<: *common
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - infrastructure
+
+  mongodb:
+    !!merge <<: *common
+    image: mongo:7.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - ${DATA_DIR:-./data}/mongodb:/data/db
+    networks:
+      - infrastructure
+
+  traefik:
+    !!merge <<: *common
+    container_name: traefik
+    image: traefik:v3.6.4
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_DIR:-./config}/traefik/traefik.yaml:/traefik.yml
+    ports:
+      - "80:80"
+      - "443:443"
+      - "9000:9000"
+    networks:
+      - infrastructure
+
+  openobserve:
+    !!merge <<: *common
+    image: openobserve/openobserve:latest
+    container_name: openobserve
+    environment:
+      - ZO_DATA_DIR=/data
+      - ZO_ROOT_USER_EMAIL=demeyerthom@gmail.com
+      - ZO_ROOT_USER_PASSWORD=foobar
+      - ZO_LOCAL_MODE=true
+      - ZO_LOCAL_MODE_STORAGE=disk
+    ports:
+      - "5080:5080"
+    volumes:
+      - ${DATA_DIR:-./data}/openobserve:/data
+    networks:
+      - infrastructure
+
+  elasticsearch:
+    !!merge <<: *common
+    container_name: elasticsearch
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+    image: elasticsearch:7.17.27
+    ports:
+      - "9200:9200"
+    volumes:
+      - ${DATA_DIR:-./data}/elasticsearch:/var/lib/elasticsearch/data
+    networks:
+      - infrastructure
+
+  postgresql:
+    !!merge <<: *common
+    container_name: postgresql
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DATA_DIR:-./data}/postgresql:/var/lib/postgresql/data
+    networks:
+      - infrastructure
+
+  temporal:
+    !!merge <<: *common
+    container_name: temporal
+    image: temporalio/auto-setup:1.29.1
+    depends_on:
+      - postgresql
+      - elasticsearch
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - ENABLE_ES=true
+      - ES_SEEDS=elasticsearch
+      - ES_VERSION=v7
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    ports:
+      - "7233:7233"
+    networks:
+      - infrastructure
+
+  temporal-ui:
+    !!merge <<: *common
+    container_name: temporal-ui
+    image: temporalio/ui:2.34.0
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_UNSAFE_ALLOW_ALL_ORIGINS=true
+    ports:
+      - "8080:8080"
+    networks:
+      - infrastructure
+
+  ollama:
+    container_name: ollama
+    build:
+      context: .
+      dockerfile: ./docker/ollama/Dockerfile
+    ports:
+      - "11434:11434"
+    networks:
+      - infrastructure
+
+networks:
+  infrastructure:
+    name: infrastructure
+    driver: bridge

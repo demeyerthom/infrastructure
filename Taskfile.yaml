@@ -1,0 +1,32 @@
+version: 3
+
+tasks:
+  remote:sync:
+    dotenv:
+      - .env.remote
+    cmds:
+      - rsync -avz --delete ./config/otel-collector docker:$CONFIG_DIR
+      - rsync -avz --delete ./config/traefik docker:$CONFIG_DIR
+    desc: "Sync local infrastructure files to remote server"
+
+  remote:
+    dotenv:
+      - .env.remote
+    cmds:
+      - docker compose --env-file .env.remote --profile remote {{.CLI_ARGS}}
+    desc: "Deploy the infrastructure to the production environment"
+
+  remote:clean:
+    dotenv:
+      - .env.remote
+    cmds:
+      - docker compose --env-file .env.remote --profile remote rm -v -f
+    desc: "Deploy the infrastructure to the production environment"
+
+  remote:deploy:
+    dotenv:
+      - .env.remote
+    cmds:
+      - task: remote:sync
+      - docker compose --env-file .env.remote --profile remote up -d --build --remove-orphans {{.CLI_ARGS}}
+    desc: "Deploy the infrastructure to the production environment"

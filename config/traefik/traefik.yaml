@@ -1,0 +1,41 @@
+entryPoints:
+  web:
+    address: ":8080"       # HTTP
+  traefik:
+    address: ":9000"       # Dashboard
+
+api:
+  dashboard: true           # Enable the dashboard
+  insecure: true            # Exposes the dashboard without auth (for testing only)
+
+providers:
+  docker:
+    exposedByDefault: false # Only containers with traefik.enable=true will be routed
+
+log:
+  level: INFO
+  format: json
+  otlp:
+    http:
+      endpoint: https://otel-collector:4318/v1/logs
+
+metrics:
+  otlp:
+    http:
+      endpoint: http://otel-collector:4318/v1/metrics
+      tls:
+        insecureSkipVerify: true
+
+tracing:
+  otlp:
+    http:
+      endpoint: http://otel-collector:4318/v1/tracing
+      tls:
+        insecureSkipVerify: true
+
+experimental:
+  otlplogs: true
+
+global:
+  checkNewVersion: true      # set to false to disable
+  sendAnonymousUsage: true  # set to true to enable

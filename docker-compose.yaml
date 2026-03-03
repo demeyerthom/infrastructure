@@ -152,12 +152,25 @@ services:
       - infrastructure
 
   ollama:
+    !!merge <<: *common
     container_name: ollama
     build:
       context: .
       dockerfile: ./docker/ollama/Dockerfile
     ports:
       - "11434:11434"
+    networks:
+      - infrastructure
+
+  n8n:
+    !!merge <<: *common
+    container_name: n8n
+    image: n8nio/n8n:2.9.4
+    environment:
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      - N8N_RUNNERS_ENABLED=admin
+    ports:
+      - "5678:5678"
     networks:
       - infrastructure
 

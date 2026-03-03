@@ -1,5 +1,5 @@
 # Ollama with Gemma3 model pre-installed
-FROM ollama/ollama:latest
+FROM ollama/ollama:0.15.1
 
 # Expose the Ollama API port
 EXPOSE 11434

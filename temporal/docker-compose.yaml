@@ -1,0 +1,48 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+
+name: temporal
+services:
+  temporal:
+    <<: *common
+    container_name: temporal
+    image: temporalio/auto-setup:1.29.1
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=192.168.1.41
+      - ENABLE_ES=true
+      - ES_SEEDS=192.168.1.41
+      - ES_VERSION=v7
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    ports:
+      - "7233:7233"
+    networks:
+      - temporal
+
+  temporal-ui:
+    <<: *common
+    container_name: temporal-ui
+    image: temporalio/ui:2.34.0
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_UNSAFE_ALLOW_ALL_ORIGINS=true
+      - TEMPORAL_CSRF_COOKIE_INSECURE=true
+    ports:
+      - "8080:8080"
+    networks:
+      - temporal
+
+networks:
+  temporal:
+    name: temporal
+    driver: bridge

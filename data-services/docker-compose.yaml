@@ -1,0 +1,141 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+
+name: data-services
+services:
+  postgresql:
+    <<: *common
+    container_name: postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DATA_DIR:-./data}/postgresql:/var/lib/postgresql/data
+      - ${CONFIG_DIR:-./config}/postgresql/init:/docker-entrypoint-initdb.d
+    networks:
+      - data-services
+
+  elasticsearch:
+    <<: *common
+    container_name: elasticsearch
+    environment:
+      - cluster.routing.allocation.disk.threshold_enabled=true
+      - cluster.routing.allocation.disk.watermark.low=512mb
+      - cluster.routing.allocation.disk.watermark.high=256mb
+      - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms256m -Xmx256m
+      - xpack.security.enabled=false
+    image: elasticsearch:7.17.27
+    ports:
+      - "9200:9200"
+    volumes:
+      - ${DATA_DIR:-./data}/elasticsearch:/var/lib/elasticsearch/data
+    networks:
+      - data-services
+
+  redis:
+    <<: *common
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - data-services
+
+  init-clickhouse:
+    <<: *common
+    image: clickhouse/clickhouse-server:25.5.6
+    container_name: init-clickhouse
+    command:
+      - bash
+      - -c
+      - |
+        version="v0.0.1"
+        node_os=$$(uname -s | tr '[:upper:]' '[:lower:]')
+        node_arch=$$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+        echo "Fetching histogram-binary for $${node_os}/$${node_arch}"
+        cd /tmp
+        wget -O histogram-quantile.tar.gz "https://github.com/SigNoz/signoz/releases/download/histogram-quantile%2F$${version}/histogram-quantile_$${node_os}_$${node_arch}.tar.gz"
+        tar -xvzf histogram-quantile.tar.gz
+        mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+    restart: on-failure
+    volumes:
+      - ${DATA_DIR:-./data}/clickhouse-user-scripts:/var/lib/clickhouse/user_scripts/
+    networks:
+      - data-services
+
+  zookeeper:
+    <<: *common
+    image: signoz/zookeeper:3.7.1
+    container_name: zookeeper
+    user: root
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -s -m 2 http://localhost:8080/commands/ruok | grep error | grep null
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ${DATA_DIR:-./data}/zookeeper:/bitnami/zookeeper
+    environment:
+      - ZOO_SERVER_ID=1
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_AUTOPURGE_INTERVAL=1
+      - ZOO_ENABLE_PROMETHEUS_METRICS=yes
+      - ZOO_PROMETHEUS_METRICS_PORT_NUMBER=9141
+    profiles:
+      - with-zookeeper
+    networks:
+      - data-services
+
+  clickhouse:
+    <<: *common
+    image: clickhouse/clickhouse-server:25.5.6
+    tty: true
+    depends_on:
+      init-clickhouse:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - -q
+        - 0.0.0.0:8123/ping
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    container_name: clickhouse
+    volumes:
+      - ${CONFIG_DIR:-./config}/clickhouse/config.xml:/etc/clickhouse-server/config.xml
+      - ${CONFIG_DIR:-./config}/clickhouse/users.xml:/etc/clickhouse-server/users.xml
+      - ${CONFIG_DIR:-./config}/clickhouse/custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - ${DATA_DIR:-./data}/clickhouse-user-scripts:/var/lib/clickhouse/user_scripts/
+      - ${CONFIG_DIR:-./config}/clickhouse/config.d/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - ${DATA_DIR:-./data}/clickhouse:/var/lib/clickhouse/
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    networks:
+      - data-services
+
+networks:
+  data-services:
+    name: data-services
+    driver: bridge

@@ -56,11 +56,11 @@
     <remap_executable>false</remap_executable>
 
     <macros>
-        <shard>01</shard>
-        <replica>example01-01-1</replica>
+        <shard>1</shard>
+        <replica>1</replica>
     </macros>
 
-    <builtin_dictionaries_reload_interval>3600</builtin_dictionaries_reload_interval>
+    <builtin_dictionaries_reload_interval>3600000</builtin_dictionaries_reload_interval>
     <max_session_timeout>3600</max_session_timeout>
     <default_session_timeout>60</default_session_timeout>
 
@@ -153,9 +153,7 @@
     <user_defined_executable_functions_config>*function.xml</user_defined_executable_functions_config>
     <user_scripts_path>/var/lib/clickhouse/user_scripts/</user_scripts_path>
 
-    <distributed_ddl>
-        <path>/clickhouse/task_queue/ddl</path>
-    </distributed_ddl>
+    
 
     <openSSL>
         <server>

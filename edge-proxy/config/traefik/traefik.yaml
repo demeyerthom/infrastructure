@@ -1,0 +1,43 @@
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+  traefik:
+    address: ":9000"
+  forgejo-ssh:
+    address: ":222"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: demeyerthom@gmail.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
+
+api:
+  dashboard: true
+  insecure: true
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO
+  format: json
+
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: true

@@ -1,0 +1,27 @@
+http:
+  routers:
+    forgejo:
+      rule: "Host(`git.de-meyer.nl`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: forgejo
+  services:
+    forgejo:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.40:3000"
+
+tcp:
+  routers:
+    forgejo-ssh:
+      rule: "HostSNI(`*`)"
+      entryPoints:
+        - forgejo-ssh
+      service: forgejo-ssh
+  services:
+    forgejo-ssh:
+      loadBalancer:
+        servers:
+          - address: "192.168.1.40:222"

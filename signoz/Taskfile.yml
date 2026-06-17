@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  sync:
+    desc: Sync signoz (CT 117) config files to remote server
+    vars:
+      CONFIG_DIR:
+        sh: "set -a && . ./.env.remote && set +a && echo \"$CONFIG_DIR\""
+    cmds:
+      - rsync -avz config/otel-collector signoz:{{.CONFIG_DIR}}
+      - rsync -avz config/signoz signoz:{{.CONFIG_DIR}}
+
+  deploy:
+    desc: Deploy SigNoz to CT 117
+    deps: [sync]
+    cmds:
+      - docker --context signoz compose --env-file .env.remote -f docker-compose.yaml up -d --build --remove-orphans
+
+  clean:
+    desc: Clean up signoz stack
+    cmds:
+      - docker --context signoz compose --env-file .env.remote -f docker-compose.yaml rm -v -f

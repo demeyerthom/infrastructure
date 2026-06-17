@@ -1,0 +1,21 @@
+version: "3"
+
+tasks:
+  sync:
+    desc: Sync edge-proxy (CT 115) config files to remote server
+    vars:
+      CONFIG_DIR:
+        sh: "set -a && . ./.env.remote && set +a && echo \"$CONFIG_DIR\""
+    cmds:
+      - rsync -avz --exclude 'letsencrypt' config/traefik edge-proxy:{{.CONFIG_DIR}}
+
+  deploy:
+    desc: Deploy edge proxy (Traefik) to CT 115
+    deps: [sync]
+    cmds:
+      - docker --context edge-proxy compose --env-file .env.remote -f docker-compose.yaml up -d --build --remove-orphans
+
+  clean:
+    desc: Clean up edge-proxy stack
+    cmds:
+      - docker --context edge-proxy compose --env-file .env.remote -f docker-compose.yaml rm -v -f

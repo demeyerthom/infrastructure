@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  sync:
+    desc: Sync data-services (CT 114) config files to remote server
+    vars:
+      CONFIG_DIR:
+        sh: "set -a && . ./.env.remote && set +a && echo \"$CONFIG_DIR\""
+    cmds:
+      - rsync -avz config/clickhouse data-services:{{.CONFIG_DIR}}
+      - rsync -avz config/postgresql data-services:{{.CONFIG_DIR}}
+
+  deploy:
+    desc: Deploy data services (PG + ES + Redis + ClickHouse) to CT 114
+    deps: [sync]
+    cmds:
+      - docker --context data-services compose --env-file .env.remote -f docker-compose.yaml up -d --build --remove-orphans
+
+  clean:
+    desc: Clean up data-services stack
+    cmds:
+      - docker --context data-services compose --env-file .env.remote -f docker-compose.yaml rm -v -f

@@ -1,59 +1,170 @@
 # Infrastructure
 
-Docker-based infrastructure repository deploying to a remote server.
+Docker-based infrastructure repository deploying across Proxmox LXCs.
 
 ## Commands
 
 ```bash
-# Deploy shared infra or it-tools to remote (use docker context directly, task is broken)
-docker --context remote compose --env-file .env.remote --profile remote up -d --build
+# Deploy edge proxy (Traefik) to CT 115
+docker --context edge-proxy compose --env-file edge-proxy/.env.remote -f edge-proxy/docker-compose.yaml up -d --build
 
-# Run arbitrary docker compose on remote
-docker --context remote compose --env-file .env.remote --profile remote up -d
-docker --context remote compose --env-file .env.remote --profile remote ps
-docker --context remote compose --env-file .env.remote --profile remote logs -f
+# Deploy data-services (PG + ES + Redis + ClickHouse) to CT 114
+docker --context data-services compose --env-file data-services/.env.remote -f data-services/docker-compose.yaml up -d --build
 
-# Deploy just it-tools
-docker --context remote compose --env-file .env.remote --profile remote -f it-tools/docker-compose.yaml up -d --build
+# Deploy Forgejo to CT 113
+docker --context forgejo compose --env-file forgejo/.env.remote -f forgejo/docker-compose.yaml up -d --build
 
-# Clean up remote stack
-docker --context remote compose --env-file .env.remote --profile remote rm -v -f
+# Deploy Temporal to CT 116
+docker --context temporal compose --env-file temporal/.env.remote -f temporal/docker-compose.yaml up -d --build
+
+# Deploy SigNoz to CT 117
+docker --context signoz compose --env-file signoz/.env.remote -f signoz/docker-compose.yaml up -d --build
+
+# General compose operations (replace <stack> with edge-proxy/data-services/forgejo/temporal/signoz)
+docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/docker-compose.yaml ps
+docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/docker-compose.yaml logs -f
+
+# Clean up a stack
+docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/docker-compose.yaml rm -v -f
 ```
 
 ## Architecture
 
-- **Remote target**: `docker` context (host alias), uses `.env.remote` env vars
-- **DATA_DIR**: `/srv/docker-data` — databases, volumes
-- **CONFIG_DIR**: `/srv/appdata` — bind-mounted configs
+| Host | Type | IP | Services |
+|------|------|----|----------|
+| CT 113 | LXC | 192.168.1.40 | Forgejo, Forgejo Runner, Docker-in-Docker |
+| CT 114 | LXC | 192.168.1.41 | PostgreSQL, Elasticsearch, Redis, ClickHouse |
+| CT 115 | LXC | 192.168.1.42 | Traefik (edge proxy) |
+| CT 116 | LXC | 192.168.1.43 | Temporal, Temporal-UI |
+| CT 117 | LXC | 192.168.1.44 | SigNoz, OTEL Collector |
+
+### External Access (via CT 115 edge proxy)
+
+| Domain | Backend | Service |
+|--------|---------|---------|
+| git.de-meyer.nl | 192.168.1.40:3000 | Forgejo web |
+| git.de-meyer.nl:222 | 192.168.1.40:222 | Forgejo SSH |
+| signoz.de-meyer.nl | 192.168.1.44:8080 | SigNoz web |
+| temporal.de-meyer.nl | 192.168.1.43:8080 | Temporal UI |
+
+### Direct Access (non-HTTP)
+
+| Service | Host | Port | Notes |
+|---------|------|------|-------|
+| OTEL ingestion (gRPC) | CT 117 | 4317 | Applications send telemetry here |
+| OTEL ingestion (HTTP) | CT 117 | 4318 | Applications send telemetry here |
+| Temporal gRPC | CT 116 | 7233 | Applications connect here |
+| ClickHouse native | CT 114 | 9000 | Internal services connect here |
+| ClickHouse HTTP | CT 114 | 8123 | Internal services connect here |
+| PostgreSQL | CT 114 | 5432 | Internal services connect here |
+| Elasticsearch | CT 114 | 9200 | Internal services connect here |
+| Redis | CT 114 | 6379 | Internal services connect here |
+
+### Data & Config Paths
+
+| Host | Data | Config |
+|------|------|--------|
+| CT 113 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data/forgejo`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/forgejo`) |
+| CT 114 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/data-services`) |
+| CT 115 | — | `/srv/appdata` |
+| CT 116 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/temporal`) |
+| CT 117 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/signoz`) |
 
 ### Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `shared/` | Core infra: SigNoz, Traefik, Temporal, PostgreSQL, MongoDB, Elasticsearch, Redis, (Ollama) |
-| `it-tools/` | Lightweight tools (corentinth/it-tools) |
+| Directory | Purpose | Target |
+|-----------|---------|--------|
+| `edge-proxy/` | Traefik reverse proxy (TLS termination) | CT 115 |
+| `data-services/` | PostgreSQL + Elasticsearch + Redis + ClickHouse | CT 114 |
+| `forgejo/` | Forgejo git server | CT 113 |
+| `temporal/` | Temporal workflow engine + UI | CT 116 |
+| `signoz/` | SigNoz observability + OTEL Collector | CT 117 |
 
 ### Key Services
 
-| Service | Ports | Notes |
-|---------|------|-------|
-| Traefik | 80, 443, 9000 | Reverse proxy, requires Docker socket mount |
-| SigNoz | 3301 | Observability (traces, logs, metrics) |
-| ClickHouse | 8123 | SigNoz backend |
-| Temporal | 7233, 7234 | Workflow engine |
-| PostgreSQL | 5432 | Temporal backend |
-| MongoDB | 27017 | |
-| Elasticsearch | 9200 | |
-| Redis | 6379 | |
+| Service | Host | Ports | Notes |
+|---------|------|-------|-------|
+| Traefik | CT 115 | 80, 443, 222, 9000 | Edge proxy, TLS termination via Let's Encrypt |
+| PostgreSQL | CT 114 | 5432 | Shared DB server (temporal, besteltool, forgejo) |
+| Elasticsearch | CT 114 | 9200 | Temporal visibility |
+| Redis | CT 114 | 6379 | Cache/pubsub |
+| ClickHouse | CT 114 | 9000, 8123 | SigNoz telemetry storage (single-node, no replication) |
+| ZooKeeper | CT 114 | 2181 | ClickHouse coordination (optional, use `--profile with-zookeeper`) |
+| Temporal | CT 116 | 7233 | Workflow engine, connects to PG/ES on CT 114 |
+| Temporal-UI | CT 116 | 8080 | Temporal web interface (via Traefik) |
+| SigNoz | CT 117 | 8080 | Observability UI (via Traefik), connects to CH on CT 114 |
+| OTEL Collector | CT 117 | 4317, 4318 | Telemetry ingestion, connects to CH on CT 114 |
+| Forgejo | CT 113 | 3000, 222 | Git server |
+| Forgejo Runner | CT 113 | — | Actions runner (DinD mode), connects to Forgejo via internal network |
+| Docker-in-Docker | CT 113 | — | Privileged DinD sidecar for Forgejo Runner job containers |
+
+### Forgejo Action Runner
+
+The Forgejo Runner executes Actions workflows using Docker-in-Docker (DinD) for isolation. The runner and DinD sidecar are part of the `forgejo` docker-compose stack.
+
+**Config:** `forgejo/config/runner/runner-config.yml` (mounted into the runner container)
+
+**Data paths on CT 113:**
+- Runner data: `/srv/lxc-data/runner` (cache, registration state)
+- DinD storage: `/srv/lxc-data/dind` (Docker image cache for job containers)
+- Runner config: `/srv/lxc-config/runner/runner-config.yml`
+
+**Runner registration (first-time setup):**
+
+1. Create directories on CT 113 and set permissions:
+   ```bash
+   mkdir -p /srv/lxc-data/runner/.cache /srv/lxc-data/dind /srv/lxc-config/runner
+   chown -R 1001:1001 /srv/lxc-data/runner
+   chmod 775 /srv/lxc-data/runner/.cache
+   chmod g+s /srv/lxc-data/runner/.cache
+   ```
+2. Copy `forgejo/config/runner/runner-config.yml` to CT 113 at `/srv/lxc-config/runner/runner-config.yml`
+3. Register the runner in the Forgejo UI:
+   - Go to `https://git.de-meyer.nl/admin/actions/runners`
+   - Click "Create new runner", name it (e.g. `infra-runner`)
+   - Copy the **UUID** and **Token**
+4. Edit `/srv/lxc-config/runner/runner-config.yml` on CT 113:
+   - Replace `REPLACE_WITH_UUID` with the UUID from the UI
+   - Replace `REPLACE_WITH_TOKEN` with the Token from the UI
+5. Deploy the stack:
+   ```bash
+   docker --context forgejo compose --env-file forgejo/.env.remote -f forgejo/docker-compose.yaml up -d
+   ```
+6. Verify the runner shows as online at `https://git.de-meyer.nl/admin/actions/runners`
+
+**Labels configured:**
+- `ubuntu-latest` — `docker://node:lts` (GitHub Actions compatible)
+- `docker` — `docker://ghcr.io/catthehacker/ubuntu:act-22.04` (broader compatibility)
+
+**Notes:**
+- The runner connects to Forgejo at `http://forgejo:3000` (internal Docker network)
+- The DinD container runs privileged (required for nested Docker); job containers are isolated from the host Docker daemon
+- The runner runs as user `1001:1001` (non-root)
+- To regenerate the default config: `docker exec forgejo-runner forgejo-runner generate-config`
+
+## Network Notes
+
+- Traefik on CT 115 routes external traffic to backends on other hosts via file provider (dynamic YAML configs)
+- Temporal on CT 116 connects to PostgreSQL and Elasticsearch via `192.168.1.41` (CT 114)
+- SigNoz on CT 117 connects to ClickHouse via `192.168.1.41` (CT 114)
+- Each LXC has its own Docker bridge network (`forgejo`, `data-services`, `edge-proxy`, `temporal`, `signoz`)
+- ClickHouse is single-node (no replication); `cluster.xml` defines a single-replica cluster for compatibility
 
 ## Remote Deployment Prerequisites
 
-1. Remote Docker host must have `infrastructure` network: `docker network create infrastructure`
-2. `DATA_DIR` and `CONFIG_DIR` volumes must exist on remote (bind-mounted from host)
+1. CT 113: `forgejo` Docker network: `docker network create forgejo`
+2. CT 114: `data-services` Docker network: `docker network create data-services`
+3. CT 115: `edge-proxy` Docker network: `docker network create edge-proxy`
+4. CT 116: `temporal` Docker network: `docker network create temporal`
+5. CT 117: `signoz` Docker network: `docker network create signoz`
+6. Bind-mount directories must exist on each host
 
 ## Notes
 
-- `shared/docker-compose.yaml` uses `!!merge` YAML anchors — edits require proper YAML merge syntax
-- `ollama` service has `profiles: [remote]` — only deploys with `--profile remote`
-- SigNoz includes OTEL collector config in `./shared/config/otel-collector/` and `./shared/config/signoz/`
-- **Traefik TLS routers**: Must specify `tls.certResolver=letsencrypt` or Traefik uses self-signed certs → `MOZILLA_PKIX_ERROR_SELF_SIGNED_CERT` errors
+- SigNoz includes OTEL collector config in `signoz/config/otel-collector/` and `signoz/config/signoz/`
+- Forgejo Runner config in `forgejo/config/runner/runner-config.yml` — requires UUID/token from Forgejo UI
+- Traefik dynamic routing configs in `edge-proxy/config/traefik/dynamic/` — add new services as YAML files
+- Docker contexts: `edge-proxy` (CT 115), `data-services` (CT 114), `forgejo` (CT 113), `temporal` (CT 116), `signoz` (CT 117)
+- **LXC containers are privileged** (required for Docker-in-LXC sysctl support)
+- **Proxmox sysctl**: `net.ipv4.ip_unprivileged_port_start=0` set in `/etc/sysctl.d/99-docker-lxc.conf`
+- **LXC configs** include: `unprivileged: 0`, `lxc.apparmor.profile: unconfined`, `lxc.cgroup2.devices.allow: a`, `lxc.cap.drop: `

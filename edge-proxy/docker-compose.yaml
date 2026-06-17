@@ -1,0 +1,31 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+
+name: edge-proxy
+services:
+  traefik:
+    <<: *common
+    container_name: traefik
+    image: traefik:v3.6.4
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_DIR:-./config}/traefik:/etc/traefik
+      - ${CONFIG_DIR:-./config}/traefik/letsencrypt:/letsencrypt
+    command:
+      - --configFile=/etc/traefik/traefik.yaml
+    ports:
+      - "80:80"
+      - "443:443"
+      - "222:222"
+      - "9000:9000"
+    networks:
+      - edge-proxy
+
+networks:
+  edge-proxy:
+    name: edge-proxy
+    driver: bridge

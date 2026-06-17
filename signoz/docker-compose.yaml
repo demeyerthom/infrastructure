@@ -1,0 +1,92 @@
+x-common: &common
+  restart: unless-stopped
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+
+name: signoz
+services:
+  signoz:
+    <<: *common
+    image: signoz/signoz:v0.114.1
+    container_name: signoz
+    environment:
+      - SIGNOZ_ALERTMANAGER_PROVIDER=signoz
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
+      - SIGNOZ_TOKENIZER_JWT_SECRET=secret
+      - SIGNOZ_USER_ROOT_EMAIL=demeyerthom@gmail.com
+      - SIGNOZ_USER_ROOT_PASSWORD=signoz
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - -q
+        - localhost:8080/api/v1/health
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${DATA_DIR:-./data}/signoz:/var/lib/signoz/
+    networks:
+      - signoz
+
+  signoz-telemetrystore-migrator:
+    <<: *common
+    image: signoz/signoz-otel-collector:v0.144.2
+    container_name: signoz-telemetrystore-migrator
+    environment:
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=false
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    entrypoint:
+      - /bin/sh
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate bootstrap &&
+        /signoz-otel-collector migrate sync up &&
+        /signoz-otel-collector migrate async up
+    restart: on-failure
+    networks:
+      - signoz
+
+  otel-collector:
+    <<: *common
+    depends_on:
+      signoz:
+        condition: service_healthy
+    image: signoz/signoz-otel-collector:v0.144.2
+    container_name: otel-collector
+    entrypoint:
+      - /bin/sh
+    command:
+      - -c
+      - |
+        /signoz-otel-collector migrate sync check &&
+        /signoz-otel-collector --config=/etc/otel-collector-config.yaml --manager-config=/etc/manager-config.yaml --copy-path=/var/tmp/collector-config.yaml
+    volumes:
+      - ${CONFIG_DIR:-./config}/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+      - ${CONFIG_DIR:-./config}/signoz/otel-collector-opamp-config.yaml:/etc/manager-config.yaml
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=host.name=infrastructure-host,os.type=linux
+      - LOW_CARDINAL_EXCEPTION_GROUPING=false
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=false
+      - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - signoz
+
+networks:
+  signoz:
+    name: signoz
+    driver: bridge

@@ -1,8 +1,18 @@
 version: "3"
 
 tasks:
+  sync:
+    desc: Sync config files to remote server
+    vars:
+      CONFIG_DIR:
+        sh: 'set -a && . ./.env.remote && set +a && echo "$CONFIG_DIR"'
+    cmds:
+      - rsync -avz config/postgresql temporal:{{.CONFIG_DIR}}
+
   deploy:
     desc: Deploy Temporal to CT 116
+    deps:
+      - sync
     cmds:
       - docker --context temporal compose --env-file .env.remote -f docker-compose.yaml up -d --build --remove-orphans
 

@@ -7,13 +7,98 @@ x-common: &common
 
 name: signoz
 services:
+  init-clickhouse:
+    <<: *common
+    image: clickhouse/clickhouse-server:25.5.6
+    container_name: init-clickhouse
+    command:
+      - bash
+      - -c
+      - |
+        version="v0.0.1"
+        node_os=$$(uname -s | tr '[:upper:]' '[:lower:]')
+        node_arch=$$(uname -m | sed s/aarch64/arm64/ | sed s/x86_64/amd64/)
+        echo "Fetching histogram-binary for $${node_os}/$${node_arch}"
+        cd /tmp
+        wget -O histogram-quantile.tar.gz "https://github.com/SigNoz/signoz/releases/download/histogram-quantile%2F$${version}/histogram-quantile_$${node_os}_$${node_arch}.tar.gz"
+        tar -xvzf histogram-quantile.tar.gz
+        mv histogram-quantile /var/lib/clickhouse/user_scripts/histogramQuantile
+    restart: on-failure
+    volumes:
+      - ${DATA_DIR:-./data}/clickhouse-user-scripts:/var/lib/clickhouse/user_scripts/
+    networks:
+      - signoz
+
+  zookeeper:
+    <<: *common
+    image: signoz/zookeeper:3.7.1
+    container_name: zookeeper
+    user: root
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -s -m 2 http://localhost:8080/commands/ruok | grep error | grep null
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ${DATA_DIR:-./data}/zookeeper:/bitnami/zookeeper
+    environment:
+      - ZOO_SERVER_ID=1
+      - ALLOW_ANONYMOUS_LOGIN=yes
+      - ZOO_AUTOPURGE_INTERVAL=1
+      - ZOO_ENABLE_PROMETHEUS_METRICS=yes
+      - ZOO_PROMETHEUS_METRICS_PORT_NUMBER=9141
+    profiles:
+      - with-zookeeper
+    networks:
+      - signoz
+
+  clickhouse:
+    <<: *common
+    image: clickhouse/clickhouse-server:25.5.6
+    tty: true
+    depends_on:
+      init-clickhouse:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - -q
+        - 0.0.0.0:8123/ping
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
+    container_name: clickhouse
+    volumes:
+      - ${CONFIG_DIR:-./config}/clickhouse/config.xml:/etc/clickhouse-server/config.xml
+      - ${CONFIG_DIR:-./config}/clickhouse/users.xml:/etc/clickhouse-server/users.xml
+      - ${CONFIG_DIR:-./config}/clickhouse/custom-function.xml:/etc/clickhouse-server/custom-function.xml
+      - ${DATA_DIR:-./data}/clickhouse-user-scripts:/var/lib/clickhouse/user_scripts/
+      - ${CONFIG_DIR:-./config}/clickhouse/config.d/cluster.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - ${DATA_DIR:-./data}/clickhouse:/var/lib/clickhouse/
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    networks:
+      - signoz
+
   signoz:
     <<: *common
     image: signoz/signoz:v0.114.1
     container_name: signoz
     environment:
       - SIGNOZ_ALERTMANAGER_PROVIDER=signoz
-      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_TELEMETRYSTORE_CLICKHOUSE_DSN=tcp://clickhouse:9000
       - SIGNOZ_SQLSTORE_SQLITE_PATH=/var/lib/signoz/signoz.db
       - SIGNOZ_TOKENIZER_JWT_SECRET=secret
       - SIGNOZ_USER_ROOT_EMAIL=demeyerthom@gmail.com
@@ -40,7 +125,7 @@ services:
     image: signoz/signoz-otel-collector:v0.144.2
     container_name: signoz-telemetrystore-migrator
     environment:
-      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://clickhouse:9000
       - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=
       - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=false
       - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m
@@ -76,7 +161,7 @@ services:
     environment:
       - OTEL_RESOURCE_ATTRIBUTES=host.name=infrastructure-host,os.type=linux
       - LOW_CARDINAL_EXCEPTION_GROUPING=false
-      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://192.168.1.41:9000
+      - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_DSN=tcp://clickhouse:9000
       - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_CLUSTER=
       - SIGNOZ_OTEL_COLLECTOR_CLICKHOUSE_REPLICATION=false
       - SIGNOZ_OTEL_COLLECTOR_TIMEOUT=10m

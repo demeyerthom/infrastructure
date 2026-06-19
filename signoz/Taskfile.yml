@@ -5,8 +5,9 @@ tasks:
     desc: Sync signoz (CT 117) config files to remote server
     vars:
       CONFIG_DIR:
-        sh: "set -a && . ./.env.remote && set +a && echo \"$CONFIG_DIR\""
+        sh: 'set -a && . ./.env.remote && set +a && echo "$CONFIG_DIR"'
     cmds:
+      - rsync -avz config/clickhouse signoz:{{.CONFIG_DIR}}
       - rsync -avz config/otel-collector signoz:{{.CONFIG_DIR}}
       - rsync -avz config/signoz signoz:{{.CONFIG_DIR}}
 

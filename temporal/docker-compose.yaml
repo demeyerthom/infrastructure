@@ -7,6 +7,21 @@ x-common: &common
 
 name: temporal
 services:
+  postgresql:
+    <<: *common
+    container_name: postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DATA_DIR:-./data}/postgresql:/var/lib/postgresql/data
+      - ${CONFIG_DIR:-./config}/postgresql:/docker-entrypoint-initdb.d
+    networks:
+      - temporal
+
   temporal:
     <<: *common
     container_name: temporal
@@ -16,10 +31,8 @@ services:
       - DB_PORT=5432
       - POSTGRES_USER=postgres
       - POSTGRES_PWD=postgres
-      - POSTGRES_SEEDS=192.168.1.41
-      - ENABLE_ES=true
-      - ES_SEEDS=192.168.1.41
-      - ES_VERSION=v7
+      - POSTGRES_SEEDS=postgresql
+      - ENABLE_ES=false
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CLI_ADDRESS=temporal:7233
     ports:

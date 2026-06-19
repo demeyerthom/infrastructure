@@ -7,6 +7,21 @@ x-common: &common
 
 name: forgejo
 services:
+  postgresql:
+    <<: *common
+    container_name: postgresql
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    volumes:
+      - ${DATA_DIR:-./data}/postgresql:/var/lib/postgresql/data
+      - ${CONFIG_DIR:-./config}/postgresql:/docker-entrypoint-initdb.d
+    networks:
+      - forgejo
+
   forgejo:
     <<: *common
     image: codeberg.org/forgejo/forgejo:15
@@ -15,7 +30,7 @@ services:
       - USER_UID=1000
       - USER_GID=1000
       - FORGEJO__database__DB_TYPE=postgres
-      - FORGEJO__database__HOST=192.168.1.41:5432
+      - FORGEJO__database__HOST=postgresql:5432
       - FORGEJO__database__NAME=forgejo
       - FORGEJO__database__USER=forgejo
       - FORGEJO__database__PASSWD=forgejo
@@ -33,7 +48,7 @@ services:
     image: docker:dind
     container_name: docker_dind
     privileged: true
-    command: ['dockerd', '-H', 'tcp://0.0.0.0:2375', '--tls=false']
+    command: ["dockerd", "-H", "tcp://0.0.0.0:2375", "--tls=false"]
     volumes:
       - ${DATA_DIR:-./data}/dind:/var/lib/docker
     networks:

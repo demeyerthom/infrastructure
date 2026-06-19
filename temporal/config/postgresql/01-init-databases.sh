@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+    CREATE USER temporal WITH PASSWORD 'temporal';
+    CREATE DATABASE temporal OWNER temporal;
+    GRANT ALL PRIVILEGES ON DATABASE temporal TO temporal;
+EOSQL

@@ -5,15 +5,21 @@ tasks:
     desc: Sync forgejo (CT 113) config files to remote server
     vars:
       CONFIG_DIR:
-        sh: "set -a && . ./.env.remote && set +a && echo \"$CONFIG_DIR\""
+        sh: 'set -a && . ./.env.remote && set +a && echo "$CONFIG_DIR"'
     cmds:
       - rsync -avz config/runner forgejo:{{.CONFIG_DIR}}
+      - rsync -avz config/postgresql forgejo:{{.CONFIG_DIR}}
 
   deploy:
     desc: Deploy Forgejo to CT 113
     deps: [sync]
     cmds:
       - docker --context forgejo compose --env-file .env.remote -f docker-compose.yaml up -d --build --remove-orphans
+
+  destroy:
+    desc: Destroy Forgejo to CT 113
+    cmds:
+      - docker --context forgejo compose --env-file .env.remote -f docker-compose.yaml down -v
 
   clean:
     desc: Clean up Forgejo stack

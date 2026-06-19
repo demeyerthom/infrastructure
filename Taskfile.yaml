@@ -7,9 +7,6 @@ includes:
   forgejo:
     taskfile: ./forgejo/Taskfile.yml
     dir: ./forgejo
-  data-services:
-    taskfile: ./data-services/Taskfile.yml
-    dir: ./data-services
   temporal:
     taskfile: ./temporal/Taskfile.yml
     dir: ./temporal

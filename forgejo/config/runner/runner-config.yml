@@ -98,5 +98,5 @@ server:
       url: https://git.de-meyer.nl/
       # UUID and Token from the Forgejo UI after registering the runner:
       #   https://git.de-meyer.nl/admin/actions/runners
-      uuid: 0a0f4ed5-32c0-444e-81ea-4691212ad6ad
-      token: 23645fcc52d6f52f54a0b7fd0e169376aa8e4bdf
+      uuid: 2b31c8fb-cc89-4d08-bcd7-8207dc59c528
+      token: 54a65cc11936e751473b6cd14ec2de426b6ac77f

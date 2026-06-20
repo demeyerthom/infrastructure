@@ -23,7 +23,7 @@ runner:
   file: .runner
   # Execute how many tasks concurrently at the same time.
   # Increase to allow parallel jobs (ensure host has enough resources).
-  capacity: 1
+  capacity: 2
   # Extra environment variables to run jobs.
   # DOCKER_HOST is passed into job containers so workflows can run
   # `docker build` etc. against the DinD sidecar.

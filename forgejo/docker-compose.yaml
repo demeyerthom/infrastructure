@@ -21,6 +21,10 @@ services:
       - ${CONFIG_DIR:-./config}/postgresql:/docker-entrypoint-initdb.d
     networks:
       - forgejo
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
   forgejo:
     <<: *common
@@ -42,6 +46,10 @@ services:
       - "222:22"
     networks:
       - forgejo
+    deploy:
+      resources:
+        limits:
+          memory: 2g
 
   docker-in-docker:
     <<: *common
@@ -53,6 +61,10 @@ services:
       - ${DATA_DIR:-./data}/dind:/var/lib/docker
     networks:
       - forgejo
+    deploy:
+      resources:
+        limits:
+          memory: 3g
 
   runner:
     <<: *common
@@ -70,6 +82,10 @@ services:
     command: forgejo-runner daemon --config /data/runner-config.yml
     networks:
       - forgejo
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
 networks:
   forgejo:

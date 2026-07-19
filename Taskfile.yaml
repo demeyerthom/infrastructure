@@ -13,6 +13,9 @@ includes:
   signoz:
     taskfile: ./signoz/Taskfile.yml
     dir: ./signoz
+  freshrss:
+    taskfile: ./freshrss/Taskfile.yml
+    dir: ./freshrss
 
 tasks:
   default:

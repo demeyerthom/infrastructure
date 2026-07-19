@@ -1,0 +1,18 @@
+http:
+  routers:
+    portainer:
+      rule: "Host(`portainer.de-meyer.nl`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: portainer
+  services:
+    portainer:
+      loadBalancer:
+        serversTransport: portainer-transport
+        servers:
+          - url: "https://192.168.1.84:9443"
+  serversTransports:
+    portainer-transport:
+      insecureSkipVerify: true

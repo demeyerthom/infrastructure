@@ -1,0 +1,22 @@
+version: "3"
+
+tasks:
+  deploy:
+    desc: Deploy FreshRSS to CT 118
+    cmds:
+      - docker --context freshrss compose --env-file .env.remote --env-file .env.secrets -f docker-compose.yaml up -d --build --remove-orphans
+
+  destroy:
+    desc: Destroy FreshRSS stack on CT 118
+    cmds:
+      - docker --context freshrss compose --env-file .env.remote --env-file .env.secrets -f docker-compose.yaml down -v
+
+  clean:
+    desc: Clean up FreshRSS stack
+    cmds:
+      - docker --context freshrss compose --env-file .env.remote --env-file .env.secrets -f docker-compose.yaml rm -v -f
+
+  logs:
+    desc: Tail FreshRSS logs
+    cmds:
+      - docker --context freshrss compose --env-file .env.remote --env-file .env.secrets -f docker-compose.yaml logs -f --timestamps

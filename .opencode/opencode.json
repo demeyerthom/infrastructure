@@ -1,0 +1,26 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "feeds-monorepo": {
+      "path": "~/Projects/feeds-monorepo",
+      "description": "Use for finding feeds-monorepo files"
+    }
+  },
+  "permission": {
+    "external_directory": {
+      "~/Projects/feeds-monorepo/**": "allow"
+    }
+  },
+  "mcp": {
+    "signoz": {
+      "enabled": true,
+      "type": "local",
+      "command": ["/home/thomas/.local/bin/signoz-mcp-server"],
+      "environment": {
+        "SIGNOZ_URL": "https://signoz.de-meyer.nl",
+        "SIGNOZ_API_KEY": "{env:SIGNOZ_API_KEY}",
+        "LOG_LEVEL": "info",
+      },
+    },
+  },
+}

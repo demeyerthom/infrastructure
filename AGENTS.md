@@ -11,16 +11,10 @@ docker --context edge-proxy compose --env-file edge-proxy/.env.remote -f edge-pr
 # Deploy Forgejo to CT 113
 docker --context forgejo compose --env-file forgejo/.env.remote -f forgejo/docker-compose.yaml up -d --build
 
-# Deploy Temporal to CT 116
-docker --context temporal compose --env-file temporal/.env.remote -f temporal/docker-compose.yaml up -d --build
-
 # Deploy SigNoz to CT 117
 docker --context signoz compose --env-file signoz/.env.remote -f signoz/docker-compose.yaml up -d --build
 
-# Deploy FreshRSS to CT 118
-docker --context freshrss compose --env-file freshrss/.env.remote --env-file freshrss/.env.secrets -f freshrss/docker-compose.yaml up -d --build
-
-# General compose operations (replace <stack> with edge-proxy/forgejo/temporal/signoz/freshrss)
+# General compose operations (replace <stack> with edge-proxy/forgejo/signoz)
 docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/docker-compose.yaml ps
 docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/docker-compose.yaml logs -f
 
@@ -34,9 +28,7 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 |------|------|----|----------|
 | CT 113 | LXC | 192.168.1.40 | Forgejo, Forgejo Runner, Docker-in-Docker, PostgreSQL (forgejo DB) |
 | CT 115 | LXC | 192.168.1.42 | Traefik (edge proxy) |
-| CT 116 | LXC | 192.168.1.43 | Temporal, Temporal-UI, PostgreSQL (temporal DB) |
 | CT 117 | LXC | 192.168.1.44 | SigNoz, OTEL Collector, ClickHouse (telemetry storage) |
-| CT 118 | LXC | 192.168.1.45 | FreshRSS (RSS aggregator, SQLite) |
 
 > Note: Each stack is self-contained — its database/store runs in the same LXC and is reached over the stack's internal Docker network by service name (e.g. `postgresql`, `clickhouse`).
 
@@ -47,7 +39,6 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 | git.de-meyer.nl | 192.168.1.40:3000 | Forgejo web |
 | git.de-meyer.nl:222 | 192.168.1.40:222 | Forgejo SSH |
 | signoz.de-meyer.nl | 192.168.1.44:8080 | SigNoz web |
-| feeds.de-meyer.nl | 192.168.1.45:8080 | FreshRSS web |
 
 ### Direct Access (non-HTTP)
 
@@ -55,10 +46,8 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 |---------|------|------|-------|
 | OTEL ingestion (gRPC) | CT 117 | 4317 | Applications send telemetry here |
 | OTEL ingestion (HTTP) | CT 117 | 4318 | Applications send telemetry here |
-| Temporal gRPC | CT 116 | 7233 | Applications connect here |
 | ClickHouse native | CT 117 | 9000 | SigNoz telemetry storage (in-stack) |
 | ClickHouse HTTP | CT 117 | 8123 | SigNoz telemetry storage (in-stack) |
-| PostgreSQL (temporal) | CT 116 | 5432 | Temporal DB (in-stack) |
 | PostgreSQL (forgejo) | CT 113 | 5432 | Forgejo DB (in-stack) |
 
 ### Data & Config Paths
@@ -67,9 +56,7 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 |------|------|--------|
 | CT 113 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data/forgejo`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/forgejo`) |
 | CT 115 | — | `/srv/lxc-config` (mp0, host: `/srv/lxc-config/edge-proxy`) |
-| CT 116 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data/temporal`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/temporal`) |
 | CT 117 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data/signoz`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/signoz`) |
-| CT 118 | `/srv/lxc-data` (mp0, host: `/srv/lxc-data/freshrss`) | `/srv/lxc-config` (mp1, host: `/srv/lxc-config/freshrss`) |
 
 ### Subdirectories
 
@@ -77,18 +64,13 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 |-----------|---------|--------|
 | `edge-proxy/` | Traefik reverse proxy (TLS termination) | CT 115 |
 | `forgejo/` | Forgejo git server + PostgreSQL (forgejo DB) + Runner + DinD | CT 113 |
-| `temporal/` | Temporal workflow engine + UI + PostgreSQL (temporal DB) | CT 116 |
 | `signoz/` | SigNoz observability + OTEL Collector + ClickHouse (telemetry storage) | CT 117 |
-| `freshrss/` | FreshRSS RSS aggregator (SQLite, in-container) | CT 118 |
 
 ### Key Services
 
 | Service | Host | Ports | Notes |
 |---------|------|-------|-------|
 | Traefik | CT 115 | 80, 443, 222, 9000 | Edge proxy, TLS termination via Let's Encrypt |
-| PostgreSQL (temporal) | CT 116 | 5432 | Temporal DB (in-stack, reached as `postgresql` by Temporal) |
-| Temporal | CT 116 | 7233 | Workflow engine, connects to in-stack PostgreSQL |
-| Temporal-UI | CT 116 | 8080 | Temporal web interface |
 | ClickHouse | CT 117 | 9000, 8123 | SigNoz telemetry storage (single-node, no replication, in-stack) |
 | ZooKeeper | CT 117 | 2181 | ClickHouse coordination (optional, use `--profile with-zookeeper`) |
 | SigNoz | CT 117 | 8080 | Observability UI (via Traefik), connects to in-stack ClickHouse |
@@ -97,7 +79,6 @@ docker --context <context> compose --env-file <stack>/.env.remote -f <stack>/doc
 | Forgejo | CT 113 | 3000, 222 | Git server, connects to in-stack PostgreSQL |
 | Forgejo Runner | CT 113 | — | Actions runner (DinD mode), connects to Forgejo via internal network |
 | Docker-in-Docker | CT 113 | — | Privileged DinD sidecar for Forgejo Runner job containers |
-| FreshRSS | CT 118 | 8080 | RSS aggregator, SQLite stored on disk in `/var/www/FreshRSS/data` |
 
 ### Forgejo Action Runner
 
@@ -147,26 +128,21 @@ The Forgejo Runner executes Actions workflows using Docker-in-Docker (DinD) for 
 
 - Traefik on CT 115 routes external traffic to backends on other hosts via file provider (dynamic YAML configs)
 - Each stack is self-contained: services reach their co-located DB/store over the stack's internal Docker network by service name (`postgresql`, `clickhouse`)
-- Temporal on CT 116 connects to its in-stack PostgreSQL (`postgresql:5432`); Elasticsearch is no longer used (`ENABLE_ES=false`)
 - SigNoz on CT 117 connects to its in-stack ClickHouse (`clickhouse:9000`)
-- Each LXC has its own Docker bridge network (`forgejo`, `edge-proxy`, `temporal`, `signoz`, `freshrss`)
+- Each LXC has its own Docker bridge network (`forgejo`, `edge-proxy`, `signoz`)
 - ClickHouse is single-node (no replication); `cluster.xml` defines a single-replica cluster for compatibility
 
 ## Remote Deployment Prerequisites
 
 1. CT 113: `forgejo` Docker network: `docker network create forgejo`
 2. CT 115: `edge-proxy` Docker network: `docker network create edge-proxy`
-3. CT 116: `temporal` Docker network: `docker network create temporal`
-4. CT 117: `signoz` Docker network: `docker network create signoz`
-5. CT 118: `freshrss` Docker network: `docker network create freshrss`
-6. Bind-mount directories must exist on each host
-
+3. CT 117: `signoz` Docker network: `docker network create signoz`
+4. Bind-mount directories must exist on each host
 ## Notes
 
 - SigNoz includes OTEL collector config in `signoz/config/otel-collector/` and `signoz/config/signoz/`; ClickHouse is in-stack (service `clickhouse`, DSN `tcp://clickhouse:9000`)
 - Forgejo Runner config in `forgejo/config/runner/runner-config.yml` — requires UUID/token from Forgejo UI
 - Traefik dynamic routing configs in `edge-proxy/config/traefik/dynamic/` — add new services as YAML files
-- Docker contexts: `edge-proxy` (CT 115), `forgejo` (CT 113), `temporal` (CT 116), `signoz` (CT 117), `freshrss` (CT 118)
-- **LXC containers are privileged** (required for Docker-in-LXC sysctl support)
+- - **LXC containers are privileged** (required for Docker-in-LXC sysctl support)
 - **Proxmox sysctl**: `net.ipv4.ip_unprivileged_port_start=0` set in `/etc/sysctl.d/99-docker-lxc.conf`
 - **LXC configs** include: `unprivileged: 0`, `lxc.apparmor.profile: unconfined`, `lxc.cgroup2.devices.allow: a`, `lxc.cap.drop: `

@@ -7,15 +7,9 @@ includes:
   forgejo:
     taskfile: ./forgejo/Taskfile.yml
     dir: ./forgejo
-  temporal:
-    taskfile: ./temporal/Taskfile.yml
-    dir: ./temporal
   signoz:
     taskfile: ./signoz/Taskfile.yml
     dir: ./signoz
-  freshrss:
-    taskfile: ./freshrss/Taskfile.yml
-    dir: ./freshrss
 
 tasks:
   default:
